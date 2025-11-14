@@ -20,20 +20,19 @@ LAUNCHER="/usr/local/bin/micro-pi-imager"
 CLI_LAUNCHER="/usr/local/bin/micro_pi_imager"
 DESKTOP_DIR="$HOME/.local/share/applications"
 DESKTOP_FILE="$DESKTOP_DIR/micro-pi-imager.desktop"
-PISHRINK_PATH="/usr/local/bin/pishrink.sh"
 
 echo "[1/7] Installing dependencies..."
 sudo apt update
 sudo apt install -y python3 python3-tk parted policykit-1 wget xz-utils
 
 echo "[2/7] Installing PiShrink..."
-if [ ! -x "$PISHRINK_PATH" ]; then
+if ! command -v pishrink.sh >/dev/null 2>&1; then
   wget -O /tmp/pishrink.sh https://raw.githubusercontent.com/Drewsif/PiShrink/master/pishrink.sh
   chmod +x /tmp/pishrink.sh
-  sudo mv /tmp/pishrink.sh "$PISHRINK_PATH"
-  echo "PiShrink installed to $PISHRINK_PATH"
+  sudo mv /tmp/pishrink.sh /usr/local/bin/pishrink.sh
+  echo "PiShrink installed."
 else
-  echo "PiShrink already installed at $PISHRINK_PATH"
+  echo "PiShrink already installed."
 fi
 
 echo "[3/7] Creating directories..."
@@ -53,14 +52,13 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 APP_TITLE = "Micro Pi-Imager"
-PISHRINK_PATH = "/usr/local/bin/pishrink.sh"
 
 def get_real_home():
     pk_uid = os.environ.get("PKEXEC_UID")
     if pk_uid:
         try:
             return pwd.getpwuid(int(pk_uid)).pw_dir
-        except Exception:
+        except:
             pass
     return os.path.expanduser("~")
 
@@ -87,12 +85,12 @@ def get_last_used_sector(devpath):
     result = run_cmd(["parted", devpath, "unit", "s", "print"])
     last = None
     for line in result.stdout.splitlines():
-        if re.match(r"^\\s*\\d+\\s", line):
+        if re.match(r"^\s*\d+\s", line):
             parts = line.split()
             if len(parts) >= 3 and parts[2].endswith("s"):
                 try:
                     last = int(parts[2][:-1])
-                except Exception:
+                except:
                     pass
     if last is not None:
         return last
@@ -179,8 +177,8 @@ class App(tk.Tk):
 
         info = ttk.Label(self,
                          text=(
-                             f"Images are saved to: {DEFAULT_BACKUP_DIR}\\n"
-                             "• PiShrink (optional): Reduce the size of the raw image.\\n"
+                             f"Images are saved to: {DEFAULT_BACKUP_DIR}\n"
+                             "• PiShrink (optional): Reduce the size of the raw image.\n"
                              "• Compression (optional): Save the final image as .gz or .xz."
                          ),
                          anchor="w", justify="left")
@@ -188,7 +186,7 @@ class App(tk.Tk):
 
     def log_write(self, s):
         self.log.configure(state="normal")
-        self.log.insert("end", s+"\\n")
+        self.log.insert("end", s+"\n")
         self.log.see("end")
         self.log.configure(state="disabled")
 
@@ -206,7 +204,7 @@ class App(tk.Tk):
         self.combo["values"] = labels
         if labels:
             self.combo.current(0)
-        self.log_write("Detected drives:\\n" + ("\\n".join(labels) if labels else "(none)"))
+        self.log_write("Detected drives:\n" + ("\n".join(labels) if labels else "(none)"))
 
     def get_dev(self):
         idx = self.combo.current()
@@ -232,7 +230,7 @@ class App(tk.Tk):
         if not outfile:
             return
 
-        if not messagebox.askyesno("Confirm", f"Create image from {dev}?\\n\\nSave to:\\n{outfile}"):
+        if not messagebox.askyesno("Confirm", f"Create image from {dev}?\n\nSave to:\n{outfile}"):
             return
 
         self.btn.config(state="disabled")
@@ -263,12 +261,12 @@ class App(tk.Tk):
                 line = line.strip()
                 if not line:
                     continue
-                m = re.search(r"(\\d+)\\s+bytes", line)
+                m = re.search(r"(\d+)\s+bytes", line)
                 if m:
                     try:
                         pct = int(int(m.group(1))*100 / total_bytes)
                         self.set_progress(min(100, pct))
-                    except Exception:
+                    except:
                         pass
                 self.log_write(line)
 
@@ -283,13 +281,8 @@ class App(tk.Tk):
 
             # PiShrink
             if self.shrink_var.get():
-                if not os.path.exists(PISHRINK_PATH):
-                    self.log_write(f"PiShrink not found at {PISHRINK_PATH}")
-                    messagebox.showerror("Error", f"PiShrink not found at {PISHRINK_PATH}")
-                    return
-
                 self.log_write("Shrinking image with PiShrink...")
-                proc2 = subprocess.Popen([PISHRINK_PATH, outfile],
+                proc2 = subprocess.Popen(["pishrink.sh", outfile],
                                          stdout=subprocess.PIPE,
                                          stderr=subprocess.STDOUT, text=True)
                 for line in proc2.stdout:
@@ -311,7 +304,8 @@ class App(tk.Tk):
 
                 proc3 = subprocess.Popen(comp_cmd,
                                          stdout=subprocess.PIPE,
-                                         stderr=subprocess.STDOUT, text=True)
+                                         stderr=subprocess.STDOUT,
+                                         text=True)
                 for line in proc3.stdout:
                     self.log_write(line.strip())
                 if proc3.wait() != 0:
@@ -320,7 +314,7 @@ class App(tk.Tk):
 
                 self.log_write(f"Compression complete: {final_path}")
 
-            messagebox.showinfo("Complete", f"Image created:\\n{final_path}")
+            messagebox.showinfo("Complete", f"Image created:\n{final_path}")
 
         except Exception as e:
             self.log_write(f"Error: {e}")
